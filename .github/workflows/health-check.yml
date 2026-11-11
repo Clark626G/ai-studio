@@ -1,0 +1,30 @@
+# GitHub Actions - AI Studio 每日健康检查
+name: AI Studio Health Check
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查 Cloady xray 节点
+        run: |
+          echo "检查 Cloady xray..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 https://xray-ccbc7dlt-workspace-rbq3ey.cloady.io || echo "Cloady 不可达"
+
+      - name: 检查 Kaggle Ollama 隧道
+        run: |
+          echo "检查 Kaggle Ollama..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 https://ollama.clark6.ccwu.cc/ || echo "Kaggle Ollama 不可达"
+
+      - name: 检查 InstaBox 保活
+        run: |
+          echo "检查 InstaBox keepalive..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 https://clark626.workers.dev/ || echo "InstaBox keepalive 不可达"
+
+      - name: 汇总结果
+        run: |
+          echo "健康检查完成于 $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
