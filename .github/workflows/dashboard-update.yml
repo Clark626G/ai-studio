@@ -1,0 +1,168 @@
+name: Dashboard Update
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Probe services and regenerate index.html
+        run: |
+          python3 - << 'PYEOF'
+          import urllib.request
+          import urllib.error
+          from datetime import datetime, timezone, timedelta
+
+          tz = timezone(timedelta(hours=8))
+          now = datetime.now(tz)
+          updated_str = now.strftime('%Y-%m-%d %H:%M')
+          today = now.date()
+
+          def days_left(target):
+              return (datetime.strptime(target, '%Y-%m-%d').date() - today).days
+
+          d_instabox = days_left('2026-12-01')
+          d_railway = days_left('2026-11-19')
+          d_exaone = days_left('2026-11-16')
+          d_workbuddy = days_left('2026-11-20')
+          d_amd = days_left('2026-12-13')
+
+          def probe_any(url):
+              # Any HTTP response (including 404) means the server is alive.
+              # Only connection failure / timeout means down.
+              try:
+                  req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                  with urllib.request.urlopen(req, timeout=15) as resp:
+                      return True
+              except urllib.error.HTTPError:
+                  return True
+              except Exception:
+                  return False
+
+          def probe_200(url):
+              try:
+                  req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                  with urllib.request.urlopen(req, timeout=15) as resp:
+                      return resp.status == 200
+              except Exception:
+                  return False
+
+          cloady_ok = probe_any('https://xray-ccbc7dlt-workspace-rbq3ey.cloady.io')
+          rw_ok = probe_any('https://railway-singbox-production.up.railway.app/') or probe_any('https://railway-singbox-sg-production.up.railway.app/')
+          sup_ok = probe_any('https://unjwfadvvffhqghrfvqs.supabase.co')
+          perk_ok = probe_200('https://perkradar.clark6.ccwu.cc')
+          ollama_ok = probe_200('https://ollama.clark6.ccwu.cc/')
+
+          def badge(cls, text):
+              return '<span class="badge %s">%s</span>' % (cls, text)
+
+          cloady_b = badge('ok', '正常') if cloady_ok else badge('off', '已停')
+          if d_railway < 0:
+              railway_b = badge('off', '已停')
+          elif rw_ok:
+              railway_b = badge('warn', '注意')
+          else:
+              railway_b = badge('off', '已停')
+          sup_b = badge('ok', '正常') if sup_ok else badge('off', '已停')
+          perk_b = badge('warn', '注意') if perk_ok else badge('off', '已停')
+          kaggle_b = badge('ok', '正常') if ollama_ok else badge('off', '已停')
+          kaggle_note = '隧道在线，后端运行中' if ollama_ok else '后端已停，等 GPU 重置'
+
+          html = """<!DOCTYPE html>
+          <html lang="zh-CN">
+          <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>AI 工作室状态看板</title>
+          <style>
+          body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:900px;margin:0 auto;padding:24px 16px;background:#f6f8fa;color:#24292f}
+          h1{font-size:24px;margin:0 0 4px}
+          .updated{color:#57606a;font-size:13px;margin-bottom:24px}
+          h2{font-size:18px;margin:28px 0 10px;border-bottom:1px solid #d0d7de;padding-bottom:6px}
+          table{width:100%%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+          th,td{padding:10px 12px;text-align:left;font-size:14px;border-bottom:1px solid #eaeef2}
+          th{background:#f6f8fa;color:#57606a;font-weight:600}
+          tr:last-child td{border-bottom:none}
+          .badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600}
+          .ok{background:#dafbe1;color:#116329}
+          .warn{background:#fff8c5;color:#7d4e00}
+          .off{background:#eaeef2;color:#57606a}
+          .note{color:#57606a;font-size:13px;margin-top:24px}
+          </style>
+          </head>
+          <body>
+          <h1>AI 工作室状态看板</h1>
+          <p class="updated">最后更新：%s（自动更新）</p>
+          <h2>小弟状态</h2>
+          <table>
+          <tr><th>小弟</th><th>状态</th><th>额度 / 到期</th></tr>
+          <tr><td>Gemini (gemini-chat)</td><td>%s</td><td>免费，默认 gemini-3.5-flash-lite</td></tr>
+          <tr><td>OpenRouter (or-chat)</td><td>%s</td><td>免费 50 次/天</td></tr>
+          <tr><td>WorkBuddy</td><td>%s</td><td>奖励积分 2000，2026-11-20 到期（剩 %d 天）</td></tr>
+          <tr><td>EXAONE</td><td>%s</td><td>$250/月，key 约 2026-11-16 到期（剩 %d 天）</td></tr>
+          <tr><td>Groq</td><td>%s</td><td>免费 1000 次/天</td></tr>
+          <tr><td>ModelScope</td><td>%s</td><td>每天 250 魔粒（当天过期），长期约 92</td></tr>
+          <tr><td>AMD Token Lab</td><td>%s</td><td>10 积分，至 2026-12-13（剩 %d 天）</td></tr>
+          </table>
+          <h2>资源状态</h2>
+          <table>
+          <tr><th>资源</th><th>状态</th><th>说明</th></tr>
+          <tr><td>InstaBox</td><td>%s</td><td>5 台免费，至 2026-12-01（剩 %d 天），之后只留 1 台</td></tr>
+          <tr><td>Kaggle GPU</td><td>%s</td><td>%s</td></tr>
+          <tr><td>Cloady</td><td>%s</td><td>JPN1 xray 运行中</td></tr>
+          <tr><td>Railway</td><td>%s</td><td>试用至约 11-19（剩 %d 天），到期删除项目并注销</td></tr>
+          <tr><td>Supabase</td><td>%s</td><td>免费版，1 周无活动自动暂停</td></tr>
+          <tr><td>Uppcoder</td><td>%s</td><td>Spark 免费版，Stack 空闲待命</td></tr>
+          <tr><td>AMD 开发者</td><td>%s</td><td>100 credits，开发者积分 0，L2 100/200</td></tr>
+          <tr><td>ModelScope GPU</td><td>%s</td><td>实例已停：Gemma 剩 13h44m，Qwen 剩 97h43m</td></tr>
+          <tr><td>Cloudflare 隧道</td><td>%s</td><td>kaggle-ollama、perkradar</td></tr>
+          <tr><td>PerkRadar</td><td>%s</td><td>在 khly 上，需唤醒才工作</td></tr>
+          <tr><td>Copilot Free</td><td>%s</td><td>已启用，编辑器侧补全</td></tr>
+          <tr><td>Google Cloud 试用</td><td>%s</td><td>US$300/90 天，需绑卡，等需要时再领</td></tr>
+          </table>
+          <p class="note">数据由 GitHub Actions 每 6 小时自动更新；余额类数据仍需手动更新。</p>
+          </body>
+          </html>
+          """ % (
+              updated_str,
+              badge('ok', '正常'), badge('ok', '正常'),
+              badge('ok', '正常'), d_workbuddy,
+              badge('warn', '注意'), d_exaone,
+              badge('ok', '正常'), badge('ok', '正常'),
+              badge('ok', '正常'), d_amd,
+              badge('ok', '正常'), d_instabox,
+              kaggle_b, kaggle_note,
+              cloady_b,
+              railway_b, d_railway,
+              sup_b,
+              badge('ok', '正常'), badge('ok', '正常'),
+              badge('off', '已停'), badge('ok', '正常'),
+              perk_b,
+              badge('ok', '正常'), badge('off', '未领'),
+          )
+
+          with open('index.html', 'w', encoding='utf-8') as f:
+              f.write(html)
+          print('index.html regenerated at', updated_str)
+          PYEOF
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "Clark626G"
+          git config user.email "Clark626@proton.me"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes, skip commit."
+          else
+            git commit -m "Update dashboard [skip ci]"
+            git push
+          fi
