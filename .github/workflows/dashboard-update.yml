@@ -112,6 +112,7 @@ jobs:
           <tr><td>Groq</td><td>%s</td><td>免费 1000 次/天</td></tr>
           <tr><td>ModelScope</td><td>%s</td><td>每天 250 魔粒（当天过期），长期约 92</td></tr>
           <tr><td>AMD Token Lab</td><td>%s</td><td>10 积分，至 2026-12-13（剩 %d 天）</td></tr>
+          <tr><td>Antigravity (agy-chat)</td><td>%s</td><td>Pro 会员，周额度、每 5 小时刷新</td></tr>
           </table>
           <h2>资源状态</h2>
           <table>
@@ -139,6 +140,7 @@ jobs:
               badge('warn', '注意'), d_exaone,
               badge('ok', '正常'), badge('ok', '正常'),
               badge('ok', '正常'), d_amd,
+              badge('ok', '正常'),
               badge('ok', '正常'), d_instabox,
               kaggle_b, kaggle_note,
               cloady_b,
